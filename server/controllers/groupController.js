@@ -26,6 +26,14 @@ const getGroup = asyncHandler(async (req, res) => {
   return successResponse(res, "Group details fetched successfully", result);
 });
 
+const getGroupActivity = asyncHandler(async (req, res) => {
+  const activity = await notificationService.getGroupActivity(
+    req.params.groupId,
+    req.user._id,
+  );
+  return successResponse(res, "Group activity fetched successfully", activity);
+});
+
 const updateGroup = asyncHandler(async (req, res) => {
   const group = await groupService.updateGroup(
     req.params.groupId,
@@ -96,6 +104,7 @@ module.exports = {
   getGroups,
   createGroup,
   getGroup,
+  getGroupActivity,
   updateGroup,
   deleteGroup,
   joinGroup,

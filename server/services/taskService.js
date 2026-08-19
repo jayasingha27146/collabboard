@@ -66,6 +66,10 @@ async function createTask(groupId, userId, payload) {
     throw new ApiError("Invalid priority value", 400);
   }
 
+  if (payload.status && !validStatuses.includes(payload.status)) {
+    throw new ApiError("Invalid status value", 400);
+  }
+
   const assigneeIsMember = group.members.some(
     (memberId) => String(memberId) === String(payload.assignedTo),
   );
@@ -80,7 +84,7 @@ async function createTask(groupId, userId, payload) {
     group: groupId,
     assignedTo: payload.assignedTo,
     createdBy: userId,
-    status: "todo",
+    status: payload.status || "todo",
     priority: payload.priority || "medium",
     deadline: payload.deadline,
   });

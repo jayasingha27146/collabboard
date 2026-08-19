@@ -55,6 +55,12 @@ router
     taskController.createTask,
   );
 
+router.get(
+  "/:groupId/activity",
+  validateObjectId("groupId"),
+  groupController.getGroupActivity,
+);
+
 // GET /api/groups/:groupId
 // PUT /api/groups/:groupId
 // DELETE /api/groups/:groupId

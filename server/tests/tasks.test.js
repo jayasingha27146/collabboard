@@ -40,10 +40,12 @@ describe("Task API", () => {
         description: "Design Mongo collections",
         assignedTo: owner.user.id,
         priority: "high",
+        status: "todo",
         deadline: "2026-08-25T10:00:00.000Z",
       });
 
     expect(createTaskResponse.status).toBe(201);
+    expect(createTaskResponse.body.data.status).toBe("todo");
 
     const taskId = createTaskResponse.body.data._id;
 
@@ -59,6 +61,14 @@ describe("Task API", () => {
     expect(updateTaskResponse.status).toBe(200);
     expect(updateTaskResponse.body.data.status).toBe("doing");
 
+    const activeDashboardResponse = await request(app)
+      .get("/api/dashboard")
+      .set("Authorization", `Bearer ${owner.token}`);
+
+    expect(activeDashboardResponse.body.data.upcomingTasks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ _id: taskId })]),
+    );
+
     const conflictResponse = await request(app)
       .put(`/api/tasks/${taskId}`)
       .set("Authorization", `Bearer ${owner.token}`)
@@ -68,6 +78,30 @@ describe("Task API", () => {
       });
 
     expect(conflictResponse.status).toBe(409);
+
+    const completeTaskResponse = await request(app)
+      .put(`/api/tasks/${taskId}`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({
+        status: "done",
+        version: updateTaskResponse.body.data.__v,
+      });
+
+    expect(completeTaskResponse.status).toBe(200);
+
+    const completedDashboardResponse = await request(app)
+      .get("/api/dashboard")
+      .set("Authorization", `Bearer ${owner.token}`);
+
+    expect(completedDashboardResponse.body.data.activeTasks).toBe(
+      activeDashboardResponse.body.data.activeTasks - 1,
+    );
+    expect(completedDashboardResponse.body.data.completedTasks).toBe(
+      activeDashboardResponse.body.data.completedTasks + 1,
+    );
+    expect(completedDashboardResponse.body.data.upcomingTasks).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ _id: taskId })]),
+    );
 
     const deleteResponse = await request(app)
       .delete(`/api/tasks/${taskId}`)

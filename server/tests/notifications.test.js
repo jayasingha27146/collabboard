@@ -50,4 +50,41 @@ describe("Notification API", () => {
     expect(markResponse.status).toBe(200);
     expect(markResponse.body.data.isRead).toBe(true);
   });
+
+  test("fetch group activity from real notifications", async () => {
+    const owner = await registerUser({ email: "activity-owner@example.com" });
+    const member = await registerUser({ email: "activity-member@example.com" });
+    const outsider = await registerUser({ email: "activity-outsider@example.com" });
+
+    const groupResponse = await request(app)
+      .post("/api/groups")
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ name: "Activity Group", description: "Live activity feed" });
+
+    const groupId = groupResponse.body.data._id;
+
+    await request(app)
+      .post(`/api/groups/${groupId}/join`)
+      .set("Authorization", `Bearer ${member.token}`);
+
+    const activityResponse = await request(app)
+      .get(`/api/groups/${groupId}/activity`)
+      .set("Authorization", `Bearer ${owner.token}`);
+
+    expect(activityResponse.status).toBe(200);
+    expect(activityResponse.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "GROUP_JOINED",
+          relatedGroup: groupId,
+        }),
+      ]),
+    );
+
+    const forbiddenResponse = await request(app)
+      .get(`/api/groups/${groupId}/activity`)
+      .set("Authorization", `Bearer ${outsider.token}`);
+
+    expect(forbiddenResponse.status).toBe(403);
+  });
 });

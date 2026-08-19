@@ -8,7 +8,6 @@ import AppShell from "../components/layout/AppShell.jsx";
 import TaskModal from "../components/tasks/TaskModal.jsx";
 import KanbanColumn from "../components/tasks/KanbanColumn.jsx";
 import {
-  activities,
   groups,
   members as initialMembers,
   tasks as initialTasks,
@@ -16,7 +15,7 @@ import {
 import { safeWrite, storageKeys } from "../utils/storage.js";
 import * as groupService from "../services/groupService.js";
 import * as taskService from "../services/taskService.js";
-import { toUiTask } from "../utils/taskPresentation.js";
+import { statusValues, toUiTask } from "../utils/taskPresentation.js";
 
 const tabs = ["Overview", "Tasks", "Members", "Activity"];
 
@@ -30,8 +29,10 @@ export default function GroupDetails() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [openTaskModal, setOpenTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [activities, setActivities] = useState([]);
 
   useEffect(() => {
     async function loadGroup() {
@@ -41,6 +42,7 @@ export default function GroupDetails() {
         setGroup(demoGroup);
         setMembers(initialMembers);
         setTasks(initialTasks);
+        setActivities([]);
         setLoading(false);
         return;
       }
@@ -48,10 +50,12 @@ export default function GroupDetails() {
       try {
         setLoading(true);
         setError("");
-        const [groupResponse, taskResponse] = await Promise.all([
-          groupService.getGroup(id),
-          taskService.getGroupTasks(id),
-        ]);
+        const [groupResponse, taskResponse, activityResponse] =
+          await Promise.all([
+            groupService.getGroup(id),
+            taskService.getGroupTasks(id),
+            groupService.getGroupActivity(id),
+          ]);
         const details = groupResponse?.data || groupResponse;
         const liveGroup = details?.group || details;
         const ownerId = String(liveGroup?.owner?._id || liveGroup?.owner || "");
@@ -81,6 +85,7 @@ export default function GroupDetails() {
           })),
         );
         setTasks((taskResponse?.data || taskResponse || []).map(toUiTask));
+        setActivities(activityResponse?.data || activityResponse || []);
       } catch (requestError) {
         setError(requestError.message || "Could not load this group.");
       } finally {
@@ -103,58 +108,114 @@ export default function GroupDetails() {
     setOpenTaskModal(true);
   };
 
-  const handleSaveTask = (payload) => {
+  const handleSaveTask = async (payload) => {
     const assignee = members.find((member) => member.id === payload.assigneeId);
 
     if (editingTask) {
-      setTasks((current) =>
-        current.map((task) =>
-          task.id === editingTask.id
-            ? {
-                ...task,
-                ...payload,
-                assigneeName: assignee?.fullName || "Unknown",
-                assigneeAvatar: assignee?.avatar || "NA",
-                updatedAt: new Date().toISOString(),
-              }
-            : task,
-        ),
-      );
-      return;
+      try {
+        setActionError("");
+        const response = await taskService.updateTask(editingTask.id, {
+          title: payload.title,
+          description: payload.description,
+          assignedTo: payload.assigneeId,
+          priority: payload.priority.toLowerCase(),
+          status: statusValues[payload.status],
+          deadline: payload.deadline,
+          version: editingTask.__v,
+        });
+        const updatedTask = toUiTask({
+          ...editingTask,
+          ...(response?.data || response),
+          group: { _id: group.id, name: group.name },
+          assignedTo: {
+            _id: payload.assigneeId,
+            name: assignee?.fullName || editingTask.assigneeName,
+            avatar: assignee?.avatar || editingTask.assigneeAvatar,
+          },
+        });
+        setTasks((current) =>
+          current.map((task) =>
+            task.id === editingTask.id ? updatedTask : task,
+          ),
+        );
+        setEditingTask(null);
+        return true;
+      } catch (requestError) {
+        setActionError(requestError.message || "Could not update task.");
+        return false;
+      }
     }
 
-    const newTask = {
-      id: `task-${Date.now()}`,
-      groupId: group.id,
-      groupName: group.name,
-      assigneeName: assignee?.fullName || "Unknown",
-      assigneeAvatar: assignee?.avatar || "NA",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      ...payload,
-    };
-
-    setTasks((current) => [newTask, ...current]);
+    try {
+      setActionError("");
+      const response = await taskService.createTask({
+        groupId: group.id,
+        title: payload.title,
+        description: payload.description,
+        assignedTo: payload.assigneeId,
+        priority: payload.priority.toLowerCase(),
+        status: statusValues[payload.status],
+        deadline: payload.deadline,
+      });
+      const savedTask = toUiTask({
+        ...(response?.data || response),
+        group: { _id: group.id, name: group.name },
+        assignedTo: {
+          _id: payload.assigneeId,
+          name: assignee?.fullName || "Unknown",
+          avatar: assignee?.avatar || "",
+        },
+      });
+      setTasks((current) => [savedTask, ...current]);
+      return true;
+    } catch (requestError) {
+      setActionError(requestError.message || "Could not create task.");
+      return false;
+    }
   };
 
-  const handleDeleteTask = (taskId) => {
+  const handleDeleteTask = async (taskId) => {
     const confirmed = window.confirm(
       "Delete this task? This action cannot be undone.",
     );
     if (!confirmed) {
       return;
     }
-    setTasks((current) => current.filter((task) => task.id !== taskId));
+    try {
+      setActionError("");
+      await taskService.deleteTask(taskId);
+      setTasks((current) => current.filter((task) => task.id !== taskId));
+    } catch (requestError) {
+      setActionError(requestError.message || "Could not delete task.");
+    }
   };
 
-  const handleStatusChange = (taskId, status) => {
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === taskId
-          ? { ...task, status, updatedAt: new Date().toISOString() }
-          : task,
-      ),
-    );
+  const handleStatusChange = async (taskId, status) => {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+
+    try {
+      setActionError("");
+      const response = await taskService.updateTask(taskId, {
+        status: statusValues[status],
+        version: task.__v,
+      });
+      const updatedTask = toUiTask({
+        ...task,
+        ...(response?.data || response),
+        group: { _id: group.id, name: group.name },
+        assignedTo: {
+          _id: task.assigneeId,
+          name: task.assigneeName,
+          avatar: task.assigneeAvatar,
+        },
+      });
+      setTasks((current) =>
+        current.map((item) => (item.id === taskId ? updatedTask : item)),
+      );
+    } catch (requestError) {
+      setActionError(requestError.message || "Could not change task status.");
+    }
   };
 
   const todoTasks = groupTasks.filter((task) => task.status === "To Do");
@@ -200,6 +261,10 @@ export default function GroupDetails() {
           ))}
         </div>
       </section>
+
+      {actionError && (
+        <p className="mt-4 text-sm text-rose-600">{actionError}</p>
+      )}
 
       {activeTab === "Overview" && (
         <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -317,7 +382,7 @@ export default function GroupDetails() {
                             ) {
                               groupService.removeMember(group.id, member.id)
                                 .then(() => setMembers((current) => current.filter((memberItem) => memberItem.id !== member.id)))
-                                .catch((removeError) => setError(removeError.message));
+                                .catch((removeError) => setActionError(removeError.message));
                             }
                           }}
                         >
@@ -347,9 +412,13 @@ export default function GroupDetails() {
           ) : (
             <ul className="space-y-3">
               {activities.map((activity) => (
-                <li key={activity.id} className="glass-card p-4">
+                <li key={activity._id || activity.id} className="glass-card p-4">
                   <p className="text-sm text-slate-700">{activity.message}</p>
-                  <p className="mt-1 text-xs text-slate-500">{activity.time}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {activity.createdAt
+                      ? new Date(activity.createdAt).toLocaleString()
+                      : activity.time}
+                  </p>
                 </li>
               ))}
             </ul>

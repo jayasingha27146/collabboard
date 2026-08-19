@@ -1,4 +1,5 @@
 const Notification = require("../models/Notification");
+const { assertGroupMembership } = require("./groupService");
 const { emitToUser } = require("./realtimeService");
 
 /**
@@ -79,6 +80,33 @@ async function getUserNotifications(userId) {
 }
 
 /**
+ * Get activity recorded for a group. Bulk notifications create one document per
+ * recipient, so collapse identical event copies before returning the feed.
+ */
+async function getGroupActivity(groupId, userId) {
+  await assertGroupMembership(groupId, userId);
+
+  const notifications = await Notification.find({ relatedGroup: groupId })
+    .populate("relatedTask", "title status")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const seen = new Set();
+  return notifications.filter((notification) => {
+    const key = [
+      notification.type,
+      notification.message,
+      notification.relatedTask?._id || notification.relatedTask || "",
+      notification.createdAt?.toISOString?.() || notification.createdAt,
+    ].join(":");
+
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
  * Mark one notification as read.
  */
 async function markAsRead(userId, notificationId) {
@@ -140,6 +168,7 @@ module.exports = {
   createNotification,
   createBulkNotifications,
   getUserNotifications,
+  getGroupActivity,
   markAsRead,
   markAllAsRead,
   unreadCount,
