@@ -164,7 +164,9 @@ export default function Topbar() {
                     <span className="block font-semibold text-slate-800">
                       {user?.fullName}
                     </span>
-                    <span className="block text-slate-500">{user?.role}</span>
+                    <span className="block text-slate-500">
+                      {user?.role === "group_leader" ? "Group Leader" : "Team Member"}
+                    </span>
                   </span>
                 </span>
               </button>

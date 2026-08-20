@@ -109,4 +109,54 @@ describe("Task API", () => {
 
     expect(deleteResponse.status).toBe(200);
   });
+
+  test("shows a leader-created task to its member and allows status-only updates", async () => {
+    const leader = await registerUser({ email: "leader-tasks@example.com" });
+    const member = await registerUser({
+      email: "member-tasks@example.com",
+      role: "team_member",
+    });
+    const groupResponse = await request(app)
+      .post("/api/groups")
+      .set("Authorization", `Bearer ${leader.token}`)
+      .send({ name: "Shared Tasks", description: "Member task flow" });
+    const groupId = groupResponse.body.data._id;
+
+    await request(app)
+      .post(`/api/groups/${groupId}/members`)
+      .set("Authorization", `Bearer ${leader.token}`)
+      .send({ email: member.payload.email });
+
+    const createResponse = await request(app)
+      .post(`/api/groups/${groupId}/tasks`)
+      .set("Authorization", `Bearer ${leader.token}`)
+      .send({
+        title: "Member Assignment",
+        description: "Complete the assigned work",
+        assignedTo: member.user.id,
+        priority: "medium",
+        deadline: "2026-08-30T10:00:00.000Z",
+      });
+    const taskId = createResponse.body.data._id;
+
+    const memberTasks = await request(app)
+      .get("/api/tasks")
+      .set("Authorization", `Bearer ${member.token}`);
+    expect(memberTasks.body.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ _id: taskId })]),
+    );
+
+    const statusResponse = await request(app)
+      .put(`/api/tasks/${taskId}`)
+      .set("Authorization", `Bearer ${member.token}`)
+      .send({ status: "done", version: createResponse.body.data.__v });
+    expect(statusResponse.status).toBe(200);
+    expect(statusResponse.body.data.status).toBe("done");
+
+    const editResponse = await request(app)
+      .put(`/api/tasks/${taskId}`)
+      .set("Authorization", `Bearer ${member.token}`)
+      .send({ title: "Not allowed", version: statusResponse.body.data.__v });
+    expect(editResponse.status).toBe(403);
+  });
 });

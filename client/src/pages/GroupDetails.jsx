@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import Avatar from "../components/common/Avatar.jsx";
 import Badge from "../components/common/Badge.jsx";
 import Button from "../components/common/Button.jsx";
+import Input from "../components/common/Input.jsx";
 import EmptyState from "../components/common/EmptyState.jsx";
 import AppShell from "../components/layout/AppShell.jsx";
 import TaskModal from "../components/tasks/TaskModal.jsx";
@@ -16,11 +17,13 @@ import { safeWrite, storageKeys } from "../utils/storage.js";
 import * as groupService from "../services/groupService.js";
 import * as taskService from "../services/taskService.js";
 import { statusValues, toUiTask } from "../utils/taskPresentation.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const tabs = ["Overview", "Tasks", "Members", "Activity"];
 
 export default function GroupDetails() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("Overview");
   const [tasks, setTasks] = useState(initialTasks);
   const [members, setMembers] = useState(initialMembers);
@@ -33,6 +36,8 @@ export default function GroupDetails() {
   const [openTaskModal, setOpenTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [activities, setActivities] = useState([]);
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberActionLoading, setMemberActionLoading] = useState(false);
 
   useEffect(() => {
     async function loadGroup() {
@@ -64,6 +69,7 @@ export default function GroupDetails() {
           ...liveGroup,
           id: liveGroup?._id || id,
           owner: liveGroup?.owner?.name || "Unknown",
+          ownerId,
         });
         setMembers(
           (liveGroup?.members || []).map((member) => ({
@@ -100,6 +106,7 @@ export default function GroupDetails() {
     () => tasks.filter((task) => String(task.groupId) === String(group.id)),
     [tasks, group.id],
   );
+  const isOwner = String(group.ownerId || "") === String(user?.id || "");
 
   safeWrite(storageKeys.recentGroupId, group.id);
 
@@ -218,6 +225,59 @@ export default function GroupDetails() {
     }
   };
 
+  const handleAddMember = async (event) => {
+    event.preventDefault();
+    if (!memberEmail.trim()) return;
+
+    try {
+      setMemberActionLoading(true);
+      setActionError("");
+      const response = await groupService.addMember(group.id, memberEmail.trim());
+      const addedUser = (response?.data || response)?.user;
+      if (addedUser) {
+        setMembers((current) => [
+          ...current,
+          {
+            id: addedUser._id || addedUser.id,
+            fullName: addedUser.name || addedUser.fullName,
+            email: addedUser.email,
+            role: "Member",
+            avatar:
+              addedUser.avatar ||
+              (addedUser.name || "Member")
+                .split(" ")
+                .map((part) => part[0])
+                .slice(0, 2)
+                .join("")
+                .toUpperCase(),
+          },
+        ]);
+      }
+      setMemberEmail("");
+    } catch (requestError) {
+      setActionError(requestError.message || "Could not add member.");
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!window.confirm(`Remove ${member.fullName} from this group?`)) return;
+
+    try {
+      setMemberActionLoading(true);
+      setActionError("");
+      await groupService.removeMember(group.id, member.id);
+      setMembers((current) =>
+        current.filter((item) => String(item.id) !== String(member.id)),
+      );
+    } catch (requestError) {
+      setActionError(requestError.message || "Could not remove member.");
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
   const todoTasks = groupTasks.filter((task) => task.status === "To Do");
   const doingTasks = groupTasks.filter((task) => task.status === "Doing");
   const doneTasks = groupTasks.filter((task) => task.status === "Done");
@@ -242,7 +302,7 @@ export default function GroupDetails() {
               Members: <span className="font-semibold">{members.length}</span>
             </p>
           </div>
-          <Button variant="secondary">Edit Group</Button>
+          {isOwner && <Button variant="secondary">Edit Group</Button>}
         </div>
 
         <div className="mt-5 flex gap-2 overflow-x-auto">
@@ -292,38 +352,50 @@ export default function GroupDetails() {
       {activeTab === "Tasks" && (
         <section className="mt-6">
           <div className="mb-3 flex justify-end">
-            <Button onClick={openCreateTask}>Add Task</Button>
+            {isOwner && <Button onClick={openCreateTask}>Add Task</Button>}
           </div>
           <div className="scrollbar-thin flex gap-4 overflow-x-auto pb-2">
             <KanbanColumn
               title="TO DO"
               tasks={todoTasks}
-              onEdit={(task) => {
+              onEdit={isOwner ? (task) => {
                 setEditingTask(task);
                 setOpenTaskModal(true);
+              } : undefined}
+              onDelete={isOwner ? handleDeleteTask : undefined}
+              onStatusChange={(taskId, status) => {
+                const task = tasks.find((item) => item.id === taskId);
+                if (isOwner || String(task?.assigneeId) === String(user?.id)) handleStatusChange(taskId, status);
               }}
-              onDelete={handleDeleteTask}
-              onStatusChange={handleStatusChange}
+              canChangeStatus={(task) => isOwner || String(task.assigneeId) === String(user?.id)}
             />
             <KanbanColumn
               title="DOING"
               tasks={doingTasks}
-              onEdit={(task) => {
+              onEdit={isOwner ? (task) => {
                 setEditingTask(task);
                 setOpenTaskModal(true);
+              } : undefined}
+              onDelete={isOwner ? handleDeleteTask : undefined}
+              onStatusChange={(taskId, status) => {
+                const task = tasks.find((item) => item.id === taskId);
+                if (isOwner || String(task?.assigneeId) === String(user?.id)) handleStatusChange(taskId, status);
               }}
-              onDelete={handleDeleteTask}
-              onStatusChange={handleStatusChange}
+              canChangeStatus={(task) => isOwner || String(task.assigneeId) === String(user?.id)}
             />
             <KanbanColumn
               title="DONE"
               tasks={doneTasks}
-              onEdit={(task) => {
+              onEdit={isOwner ? (task) => {
                 setEditingTask(task);
                 setOpenTaskModal(true);
+              } : undefined}
+              onDelete={isOwner ? handleDeleteTask : undefined}
+              onStatusChange={(taskId, status) => {
+                const task = tasks.find((item) => item.id === taskId);
+                if (isOwner || String(task?.assigneeId) === String(user?.id)) handleStatusChange(taskId, status);
               }}
-              onDelete={handleDeleteTask}
-              onStatusChange={handleStatusChange}
+              canChangeStatus={(task) => isOwner || String(task.assigneeId) === String(user?.id)}
             />
           </div>
         </section>
@@ -335,6 +407,22 @@ export default function GroupDetails() {
             <div><p className="text-xs font-semibold uppercase tracking-widest text-primary-600">Group directory</p><h2 className="mt-1 text-lg font-semibold text-slate-900">Added users</h2></div>
             <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700">{members.length} {members.length === 1 ? "member" : "members"}</span>
           </div>
+          {isOwner && (
+            <form className="mb-5 flex max-w-xl items-end gap-2" onSubmit={handleAddMember}>
+              <Input
+                containerClassName="min-w-0 flex-1"
+                label="Add registered member"
+                type="email"
+                value={memberEmail}
+                onChange={(event) => setMemberEmail(event.target.value)}
+                placeholder="member@email.com"
+                required
+              />
+              <Button type="submit" disabled={memberActionLoading}>
+                Add member
+              </Button>
+            </form>
+          )}
           <table className="min-w-[700px] text-left text-sm">
             <thead className="text-xs uppercase text-slate-500">
               <tr>
@@ -370,29 +458,20 @@ export default function GroupDetails() {
                     <td className="py-3 text-slate-600">{assigned}</td>
                     <td className="py-3 text-slate-600">{completed}</td>
                     <td className="py-3">
-                      {member.role !== "Group Admin" ? (
+                      {isOwner && member.role !== "Group Admin" ? (
                         <Button
                           variant="ghost"
                           className="px-2 py-1 text-rose-600"
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Remove ${member.fullName} from group?`,
-                              )
-                            ) {
-                              groupService.removeMember(group.id, member.id)
-                                .then(() => setMembers((current) => current.filter((memberItem) => memberItem.id !== member.id)))
-                                .catch((removeError) => setActionError(removeError.message));
-                            }
-                          }}
+                          disabled={memberActionLoading}
+                          onClick={() => handleRemoveMember(member)}
                         >
                           Remove
                         </Button>
-                      ) : (
+                      ) : member.role === "Group Admin" ? (
                         <span className="text-xs text-slate-500">
                           Admin protected
                         </span>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 );

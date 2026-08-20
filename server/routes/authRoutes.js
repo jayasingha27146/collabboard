@@ -16,5 +16,17 @@ router.post(
   authController.login,
 );
 router.get("/me", protect, authController.me);
+router.put(
+  "/profile",
+  protect,
+  requireFields(["fullName", "email"]),
+  authController.updateProfile,
+);
+router.put(
+  "/change-password",
+  protect,
+  requireFields(["currentPassword", "newPassword"]),
+  authController.changePassword,
+);
 
 module.exports = router;

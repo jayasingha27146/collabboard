@@ -18,7 +18,8 @@ function normalizeUser(user) {
     id: user.id || user._id || "demo-user",
     fullName: user.fullName || user.name || "Student User",
     email: user.email || "student@example.com",
-    role: user.role || "Member",
+    role:
+      user.role === "student" ? "group_leader" : user.role || "team_member",
     avatar:
       user.avatar ||
       (user.fullName || user.name || "SU").slice(0, 2).toUpperCase(),
@@ -29,7 +30,9 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(
     () => localStorage.getItem(storageKeys.authToken) || "",
   );
-  const [user, setUser] = useState(() => safeRead(storageKeys.authUser, null));
+  const [user, setUser] = useState(() =>
+    normalizeUser(safeRead(storageKeys.authUser, null)),
+  );
   const [loading, setLoading] = useState(false);
 
   function logout() {

@@ -7,8 +7,11 @@ import AppShell from "../components/layout/AppShell.jsx";
 import GroupCard from "../components/groups/GroupCard.jsx";
 import GroupFormModal from "../components/groups/GroupFormModal.jsx";
 import * as groupService from "../services/groupService.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function Groups() {
+  const { user } = useAuth();
+  const isGroupLeader = user?.role === "group_leader";
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -77,9 +80,9 @@ export default function Groups() {
             Create and manage your study collaboration circles.
           </p>
         </div>
-        <Button onClick={() => setOpenCreateModal(true)}>
+        {isGroupLeader && <Button onClick={() => setOpenCreateModal(true)}>
           <UsersRound size={16} className="mr-2" /> Create Group
-        </Button>
+        </Button>}
       </section>
 
       <section className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -133,17 +136,17 @@ export default function Groups() {
         !error && (
           <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredGroups.map((group) => (
-              <GroupCard key={group._id || group.id} group={group} />
+              <GroupCard key={group._id || group.id} group={group} currentUserId={user?.id} />
             ))}
           </section>
         )
       )}
 
-      <GroupFormModal
+      {isGroupLeader && <GroupFormModal
         isOpen={openCreateModal}
         onClose={() => setOpenCreateModal(false)}
         onSubmit={handleCreateGroup}
-      />
+      />}
     </AppShell>
   );
 }

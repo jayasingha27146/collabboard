@@ -6,6 +6,7 @@ export default function KanbanColumn({
   onEdit,
   onDelete,
   onStatusChange,
+  canChangeStatus,
 }) {
   return (
     <section className="min-w-[290px] rounded-2xl border border-slate-200 bg-slate-100/70 p-3">
@@ -25,6 +26,7 @@ export default function KanbanColumn({
             onEdit={onEdit}
             onDelete={onDelete}
             onStatusChange={onStatusChange}
+            canChangeStatus={canChangeStatus ? canChangeStatus(task) : true}
           />
         ))}
       </div>

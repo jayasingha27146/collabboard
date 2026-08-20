@@ -4,9 +4,10 @@ import Card from "../common/Card.jsx";
 import Button from "../common/Button.jsx";
 import * as groupService from "../../services/groupService.js";
 
-export default function GroupCard({ group }) {
+export default function GroupCard({ group, currentUserId }) {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const isOwner = String(group.owner?._id || group.owner) === String(currentUserId);
 
   const addMember = async () => {
     if (!email.trim()) return;
@@ -50,7 +51,7 @@ export default function GroupCard({ group }) {
         </dl>
       </div>
 
-      <div className="mt-4 border-t border-slate-100 pt-3">
+      {isOwner && <div className="mt-4 border-t border-slate-100 pt-3">
         <label className="text-xs font-medium text-slate-600">Add registered member by email</label>
         <div className="mt-2 flex gap-2">
           <input
@@ -63,7 +64,7 @@ export default function GroupCard({ group }) {
           <Button className="px-3 py-2 text-xs" onClick={addMember}>Add</Button>
         </div>
         {message && <p className="mt-2 text-xs text-slate-500">{message}</p>}
-      </div>
+      </div>}
 
       <Link className="mt-5" to={`/groups/${group._id || group.id}`}>
         <Button className="w-full">View Group</Button>

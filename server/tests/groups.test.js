@@ -61,4 +61,48 @@ describe("Group API", () => {
     expect(detailResponse.status).toBe(403);
     expect(detailResponse.body.success).toBe(false);
   });
+
+  test("blocks a team member from creating a group", async () => {
+    const member = await registerUser({
+      email: "member-only@example.com",
+      role: "team_member",
+    });
+
+    const response = await request(app)
+      .post("/api/groups")
+      .set("Authorization", `Bearer ${member.token}`)
+      .send({ name: "Blocked Group", description: "Not allowed" });
+
+    expect(response.status).toBe(403);
+  });
+
+  test("allows only the group leader to add and remove members", async () => {
+    const leader = await registerUser({ email: "manage-leader@example.com" });
+    const member = await registerUser({
+      email: "managed-member@example.com",
+      role: "team_member",
+    });
+    const groupResponse = await request(app)
+      .post("/api/groups")
+      .set("Authorization", `Bearer ${leader.token}`)
+      .send({ name: "Managed Team", description: "Member management" });
+    const groupId = groupResponse.body.data._id;
+
+    const addResponse = await request(app)
+      .post(`/api/groups/${groupId}/members`)
+      .set("Authorization", `Bearer ${leader.token}`)
+      .send({ email: member.payload.email });
+    expect(addResponse.status).toBe(200);
+    expect(addResponse.body.data.user.email).toBe(member.payload.email);
+
+    const forbiddenRemove = await request(app)
+      .delete(`/api/groups/${groupId}/members/${leader.user.id}`)
+      .set("Authorization", `Bearer ${member.token}`);
+    expect(forbiddenRemove.status).toBe(403);
+
+    const removeResponse = await request(app)
+      .delete(`/api/groups/${groupId}/members/${member.user.id}`)
+      .set("Authorization", `Bearer ${leader.token}`);
+    expect(removeResponse.status).toBe(200);
+  });
 });

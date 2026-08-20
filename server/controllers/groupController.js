@@ -80,7 +80,7 @@ const addMember = asyncHandler(async (req, res) => {
     relatedGroup: group._id,
   });
 
-  return successResponse(res, "Member added successfully", group);
+  return successResponse(res, "Member added successfully", { group, user });
 });
 
 const removeMember = asyncHandler(async (req, res) => {

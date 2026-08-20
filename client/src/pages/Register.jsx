@@ -18,6 +18,7 @@ export default function Register() {
     email: "",
     password: "",
     confirmPassword: "",
+    role: "team_member",
   });
   const [errors, setErrors] = useState({});
 
@@ -61,6 +62,7 @@ export default function Register() {
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
+        role: formData.role,
       });
 
       if (result.success) {
@@ -106,6 +108,32 @@ export default function Register() {
             onChange={(event) => setField("email", event.target.value)}
             error={errors.email}
           />
+
+          <fieldset>
+            <legend className="mb-1.5 text-sm font-medium text-slate-700">
+              Account type
+            </legend>
+            <div className="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+              {[
+                { value: "team_member", label: "Team Member" },
+                { value: "group_leader", label: "Group Leader" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setField("role", option.value)}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    formData.role === option.value
+                      ? "bg-white text-primary-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                  aria-pressed={formData.role === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
 
           <div className="relative">
             <Input

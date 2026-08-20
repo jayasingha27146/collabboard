@@ -19,3 +19,8 @@ export async function changePassword(payload) {
   const response = await api.put("/auth/change-password", payload);
   return response.data;
 }
+
+export async function updateProfile(payload) {
+  const response = await api.put("/auth/profile", payload);
+  return response.data;
+}

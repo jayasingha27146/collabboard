@@ -5,7 +5,7 @@ import Badge from "../common/Badge.jsx";
 import Button from "../common/Button.jsx";
 import Card from "../common/Card.jsx";
 
-export default function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
+export default function TaskCard({ task, onEdit, onDelete, onStatusChange, canChangeStatus = true }) {
   const statusFlow = ["To Do", "Doing", "Done"];
   const statusIndex = statusFlow.indexOf(task.status);
 
@@ -42,7 +42,7 @@ export default function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
         <Badge>{task.status}</Badge>
 
         <div className="flex items-center gap-1">
-          {statusIndex < statusFlow.length - 1 && (
+          {onStatusChange && canChangeStatus && statusIndex < statusFlow.length - 1 && (
             <Button
               variant="secondary"
               className="px-2 py-1 text-xs"
@@ -53,20 +53,20 @@ export default function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
               Move
             </Button>
           )}
-          <Button
+          {onEdit && <Button
             variant="ghost"
             className="px-2 py-1"
             onClick={() => onEdit(task)}
           >
             <Pencil size={14} />
-          </Button>
-          <Button
+          </Button>}
+          {onDelete && <Button
             variant="ghost"
             className="px-2 py-1 text-rose-600"
             onClick={() => onDelete(task.id)}
           >
             <Trash2 size={14} />
-          </Button>
+          </Button>}
         </div>
       </div>
     </Card>

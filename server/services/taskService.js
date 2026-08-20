@@ -1,7 +1,7 @@
 const Comment = require("../models/Comment");
 const Task = require("../models/Task");
 const ApiError = require("../utils/ApiError");
-const { assertGroupMembership } = require("./groupService");
+const { assertGroupMembership, assertGroupOwner } = require("./groupService");
 const notificationService = require("./notificationService");
 const { emitToGroup } = require("./realtimeService");
 
@@ -9,9 +9,9 @@ const validStatuses = ["todo", "doing", "done"];
 const validPriorities = ["high", "medium", "low"];
 
 const allowedTransitions = {
-  todo: ["doing"],
+  todo: ["doing", "done"],
   doing: ["todo", "done"],
-  done: ["doing"],
+  done: ["todo", "doing"],
 };
 
 function buildTaskFilters(query) {
@@ -60,7 +60,7 @@ async function getGroupTasks(groupId, userId, query) {
 }
 
 async function createTask(groupId, userId, payload) {
-  const group = await assertGroupMembership(groupId, userId);
+  const group = await assertGroupOwner(groupId, userId);
 
   if (payload.priority && !validPriorities.includes(payload.priority)) {
     throw new ApiError("Invalid priority value", 400);
@@ -132,6 +132,17 @@ async function updateTask(taskId, userId, payload) {
   }
 
   const group = await assertGroupMembership(task.group, userId);
+  const isOwner = String(group.owner) === String(userId);
+  const isAssignee = String(task.assignedTo) === String(userId);
+  const changedFields = Object.keys(payload).filter(
+    (field) => !["version", "status"].includes(field),
+  );
+  if (!isOwner && (!isAssignee || changedFields.length > 0)) {
+    throw new ApiError(
+      "Forbidden: Members can only update the status of their assigned tasks",
+      403,
+    );
+  }
 
   const expectedVersion = Number(payload.version);
   if (Number.isNaN(expectedVersion)) {
@@ -244,7 +255,7 @@ async function deleteTask(taskId, userId) {
     throw new ApiError("Task not found", 404);
   }
 
-  await assertGroupMembership(task.group, userId);
+  await assertGroupOwner(task.group, userId);
 
   await Promise.all([
     Comment.deleteMany({ task: taskId }),

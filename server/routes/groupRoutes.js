@@ -4,6 +4,7 @@ const groupController = require("../controllers/groupController");
 const taskController = require("../controllers/taskController");
 
 const { protect } = require("../middleware/authMiddleware");
+const { allowRoles } = require("../middleware/roleMiddleware");
 
 const {
   requireFields,
@@ -20,7 +21,11 @@ router.use(protect);
 router
   .route("/")
   .get(groupController.getGroups)
-  .post(requireFields(["name", "description"]), groupController.createGroup);
+  .post(
+    allowRoles("group_leader", "student"),
+    requireFields(["name", "description"]),
+    groupController.createGroup,
+  );
 
 // POST /api/groups/:groupId/join
 router.post(

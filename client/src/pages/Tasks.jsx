@@ -8,8 +8,10 @@ import TaskModal from "../components/tasks/TaskModal.jsx";
 import { getGroups } from "../services/groupService.js";
 import * as taskService from "../services/taskService.js";
 import { statusValues, toUiTask } from "../utils/taskPresentation.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function Tasks() {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [groups, setGroups] = useState([]);
   const [error, setError] = useState("");
@@ -33,7 +35,10 @@ export default function Tasks() {
     loadTasks();
   }, []);
 
-  const selectedGroup = groups[0];
+  const ownedGroups = groups.filter(
+    (group) => String(group.owner?._id || group.owner) === String(user?.id),
+  );
+  const selectedGroup = ownedGroups[0];
   const members = (selectedGroup?.members || []).map((member) => ({
     id: member._id,
     fullName: member.name,
@@ -126,6 +131,34 @@ export default function Tasks() {
     }
   };
 
+  const handleStatusChange = async (task, nextStatus) => {
+    try {
+      setError("");
+      const response = await taskService.updateTask(task.id, {
+        status: statusValues[nextStatus],
+        version: task.__v,
+      });
+      const updated = toUiTask({
+        ...task,
+        ...(response?.data || response),
+        group: task.group,
+        assignedTo: task.assignedTo,
+      });
+      setTasks((current) =>
+        current.map((item) => (item.id === task.id ? updated : item)),
+      );
+    } catch (requestError) {
+      setError(requestError.message || "Could not update task status.");
+    }
+  };
+
+  const ownsTaskGroup = (task) =>
+    groups.some(
+      (group) =>
+        String(group._id || group.id) === String(task.groupId) &&
+        String(group.owner?._id || group.owner) === String(user?.id),
+    );
+
   return (
     <AppShell>
       <section className="flex flex-wrap items-start justify-between gap-3">
@@ -135,14 +168,14 @@ export default function Tasks() {
             Manage assignments across all study groups.
           </p>
         </div>
-        <Button
+        {user?.role === "group_leader" && selectedGroup && <Button
           onClick={() => {
             setEditingTask(null);
             setOpenModal(true);
           }}
         >
           Add Task
-        </Button>
+        </Button>}
       </section>
 
       <section className="mt-6 flex gap-2 overflow-x-auto">
@@ -161,7 +194,7 @@ export default function Tasks() {
         ))}
       </section>
 
-      {selectedGroup && (
+      {user?.role === "group_leader" && selectedGroup && (
         <p className="mt-3 text-xs text-slate-500">
           New tasks will be added to: {selectedGroup.name}
         </p>
@@ -201,8 +234,18 @@ export default function Tasks() {
 
               <div className="mt-3 flex items-center justify-between">
                 <Badge>{task.status}</Badge>
-                <div className="flex gap-2">
-                  <Button
+                <div className="flex items-center gap-2">
+                  {(ownsTaskGroup(task) || String(task.assigneeId) === String(user?.id)) && (
+                    <select
+                      aria-label={`Update ${task.title} status`}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+                      value={task.status}
+                      onChange={(event) => handleStatusChange(task, event.target.value)}
+                    >
+                      {['To Do', 'Doing', 'Done'].map((status) => <option key={status}>{status}</option>)}
+                    </select>
+                  )}
+                  {ownsTaskGroup(task) && <Button
                     variant="secondary"
                     className="px-2 py-1 text-xs"
                     onClick={() => {
@@ -211,14 +254,14 @@ export default function Tasks() {
                     }}
                   >
                     Edit
-                  </Button>
-                  <Button
+                  </Button>}
+                  {ownsTaskGroup(task) && <Button
                     variant="ghost"
                     className="px-2 py-1 text-xs text-rose-600"
                     onClick={() => handleDeleteTask(task.id)}
                   >
                     Delete
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             </article>
@@ -226,13 +269,13 @@ export default function Tasks() {
         </section>
       )}
 
-      <TaskModal
+      {user?.role === "group_leader" && <TaskModal
         isOpen={openModal}
         onClose={() => setOpenModal(false)}
         onSubmit={handleSaveTask}
         members={members}
         initialTask={editingTask}
-      />
+      />}
     </AppShell>
   );
 }
